@@ -69,10 +69,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Oldest hosted images, so the binary links against an older glibc.
-          # arm64 = Raspberry Pi 4/5 on 64-bit Raspberry Pi OS (not 32-bit armv7).
+          # Oldest hosted image, so the binary links against an older glibc.
+          # No frozen arm64 build: Raspberry Pi runs from source (job pi-source below).
           - { arch: x86_64, runner: ubuntu-22.04 }
-          - { arch: arm64, runner: ubuntu-22.04-arm }
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
@@ -85,6 +84,14 @@ jobs:
         run: |
           git clone --depth 1 https://github.com/darqlab/leiturgia.git build/leiturgia_server
           git -C build/leiturgia_server describe --tags --always --dirty > build/leiturgia_server/_server_version.txt
+
+      - name: Install Qt runtime libraries and xvfb
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb libegl1 libgl1 libxkbcommon-x11-0 libxcb-cursor0 \
+            libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-render-util0 libxcb-shape0 \
+            libxcb-xinerama0 libnss3 libasound2 libxcomposite1 libxdamage1 libxrandr2 \
+            libxtst6 libdbus-1-3 libevent-2.1-7 libwebp7 libopus0 libxslt1.1 libminizip1 libpulse0
 
       - name: Install build dependencies
         run: pip install -r requirements-desktop.txt pyinstaller
@@ -109,6 +116,15 @@ jobs:
           [ "$code" = 200 ] || { echo "login page returned $code"; exit 1; }
           echo "smoke test passed"
 
+      - name: Native window self-test (xvfb)
+        env:
+          LEITURGIA_SELFTEST: "1"
+          QTWEBENGINE_CHROMIUM_FLAGS: "--no-sandbox --disable-gpu"
+        run: |
+          rm -f dist/config.json
+          xvfb-run -a -s "-screen 0 1280x720x24" timeout 120 ./dist/leiturgia-desktop 2>&1 | tee selftest.log
+          grep -q NATIVE_WINDOW_OK selftest.log
+
       - name: Package tarball
         run: |
           if [[ "$GITHUB_REF" == refs/tags/* ]]; then ver="${GITHUB_REF_NAME#v}"; else ver=dev; fi
@@ -120,9 +136,38 @@ jobs:
           name: dist-linux-${{ matrix.arch }}
           path: dist/leiturgia-desktop-*.tar.gz
 
+  pi-source:
+    # Raspberry Pi path: run from source on the OS's GTK/WebKit (arm64, system Python).
+    name: pi-source (arm64)
+    runs-on: ubuntu-22.04-arm
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Clone parent server
+        run: git clone --depth 1 https://github.com/darqlab/leiturgia.git build/leiturgia_server
+
+      - name: Install system packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb python3-venv python3-gi gir1.2-gtk-3.0 gir1.2-webkit2-4.0
+
+      - name: Create venv and install
+        run: |
+          python3 -m venv --system-site-packages .venv
+          .venv/bin/pip install -r requirements-desktop.txt
+
+      - name: Native window self-test (xvfb, GTK)
+        env:
+          LEITURGIA_SELFTEST: "1"
+          LEITURGIA_SERVER_DIR: ${{ github.workspace }}/build/leiturgia_server
+        run: |
+          cp build/leiturgia_server/config.example.json build/leiturgia_server/config.json
+          xvfb-run -a -s "-screen 0 1280x720x24" timeout 120 .venv/bin/python desktop_entry.py 2>&1 | tee selftest.log
+          grep -q NATIVE_WINDOW_OK selftest.log
+
   release:
     if: startsWith(github.ref, 'refs/tags/')
-    needs: [windows, linux]
+    needs: [windows, linux, pi-source]
     runs-on: ubuntu-22.04
     permissions:
       contents: write

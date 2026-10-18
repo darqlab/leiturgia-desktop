@@ -17,9 +17,9 @@ import logging
 import os
 import secrets
 import shutil
+import subprocess
 import sys
 import tempfile
-import threading
 import time
 import urllib.request
 
@@ -28,7 +28,7 @@ logger = logging.getLogger("leiturgia.desktop")
 APP_DIR = ""
 _PORT_START = 5000
 _PORT_ATTEMPTS = 11
-_READY_TIMEOUT = 30.0
+_READY_TIMEOUT = 60.0
 _SERVER_SUBDIR = "leiturgia_server"
 
 
@@ -174,10 +174,12 @@ def _pick_port() -> int:
     return _PORT_START
 
 
-def _wait_for_server(port: int, timeout: float = _READY_TIMEOUT) -> bool:
+def _wait_for_server(port: int, timeout: float = _READY_TIMEOUT, proc=None) -> bool:
     url = f"http://127.0.0.1:{port}/api/health"
     deadline = time.time() + timeout
     while time.time() < deadline:
+        if proc is not None and proc.poll() is not None:
+            return False
         try:
             with urllib.request.urlopen(url, timeout=1) as resp:
                 if resp.status == 200:
@@ -216,7 +218,14 @@ def _choose_monitor(spec):
     return monitors[0]
 
 
-def _run_server(server, host: str, port: int) -> None:
+def _run_server(host: str, port: int) -> None:
+    """Run the Flask/SocketIO server in this process (blocking).
+
+    app.py monkey-patches threading via eventlet, which starves Qt/pywebview's own
+    helper threads, so the GUI process never imports it: the server runs as a
+    child process (``LEITURGIA_ROLE=server``) and the GUI process only talks HTTP.
+    """
+    server = importlib.import_module("app")
     try:
         starter = getattr(server, "start_background_services", None)
         if callable(starter):
@@ -226,10 +235,28 @@ def _run_server(server, host: str, port: int) -> None:
             server.socketio.start_background_task(server._cloud_update_pump)
         server.socketio.run(server.app, host=host, port=port, debug=False)
     except Exception:
-        logger.exception("server thread failed")
+        logger.exception("server failed")
+        raise
 
 
-def _open_projection(port: int, monitor) -> None:
+def _spawn_server(host: str, port: int) -> subprocess.Popen:
+    cmd = [sys.executable] if _is_frozen() else [sys.executable, os.path.abspath(__file__)]
+    env = dict(os.environ, LEITURGIA_ROLE="server", LEITURGIA_HOST=host, LEITURGIA_PORT=str(port))
+    return subprocess.Popen(cmd, env=env)
+
+
+def _stop_server(proc: subprocess.Popen) -> None:
+    if proc.poll() is not None:
+        return
+    proc.terminate()
+    try:
+        proc.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+
+
+def _open_projection(port: int, monitor) -> bool:
+    """Open the native projection window. Returns False if it fell back to the browser."""
     url = f"http://127.0.0.1:{port}/ch1"
     try:
         import webview
@@ -242,8 +269,17 @@ def _open_projection(port: int, monitor) -> None:
                 width=monitor.width,
                 height=monitor.height,
             )
-        webview.create_window(**kwargs)
-        webview.start()
+        window = webview.create_window(**kwargs)
+        start_kwargs = {}
+        if _is_frozen() and sys.platform.startswith("linux"):
+            # The frozen binary bundles Qt WebEngine; system GTK is not reachable from it.
+            # From source (e.g. Raspberry Pi) pywebview picks the system GTK/WebKit itself.
+            start_kwargs["gui"] = "qt"
+        if os.environ.get("LEITURGIA_SELFTEST"):
+            start_kwargs["func"] = _selftest_close
+            start_kwargs["args"] = (window,)
+        webview.start(**start_kwargs)
+        return True
     except Exception:
         logger.exception("native window failed; falling back to the browser")
         try:
@@ -252,6 +288,14 @@ def _open_projection(port: int, monitor) -> None:
             webbrowser.open(url)
         except Exception:
             logger.exception("browser fallback failed")
+        return False
+
+
+def _selftest_close(window) -> None:
+    """CI self-test: wait for the page to load in the native window, report, close."""
+    loaded = window.events.loaded.wait(60)
+    print("NATIVE_WINDOW_OK" if loaded else "NATIVE_WINDOW_TIMEOUT", flush=True)
+    window.destroy()
 
 
 def main() -> int:
@@ -260,25 +304,32 @@ def main() -> int:
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
     _setup_paths()
-    server = importlib.import_module("app")
+
+    if os.environ.get("LEITURGIA_ROLE") == "server":
+        _run_server(os.environ["LEITURGIA_HOST"], int(os.environ["LEITURGIA_PORT"]))
+        return 0
+
     host = _bind_host()
     port = _pick_port()
-    threading.Thread(target=_run_server, args=(server, host, port), daemon=True).start()
-    if not _wait_for_server(port):
-        logger.error("server did not become ready on port %d", port)
-        return 1
-    logger.info("Leiturgia desktop ready: http://127.0.0.1:%d/ (projection /ch1)", port)
+
     if os.environ.get("LEITURGIA_HEADLESS"):
         logger.info("headless mode: serving without a projection window")
-        try:
-            while True:
-                time.sleep(1)
-        except KeyboardInterrupt:
-            pass
+        _run_server(host, port)
         return 0
-    monitor = _choose_monitor(_load_config().get("monitor", "auto"))
-    _open_projection(port, monitor)
-    return 0
+
+    proc = _spawn_server(host, port)
+    try:
+        if not _wait_for_server(port, proc=proc):
+            logger.error("server did not become ready on port %d", port)
+            return 1
+        logger.info("Leiturgia desktop ready: http://127.0.0.1:%d/ (projection /ch1)", port)
+        monitor = _choose_monitor(_load_config().get("monitor", "auto"))
+        native = _open_projection(port, monitor)
+        if os.environ.get("LEITURGIA_SELFTEST") and not native:
+            return 1
+        return 0
+    finally:
+        _stop_server(proc)
 
 
 if __name__ == "__main__":

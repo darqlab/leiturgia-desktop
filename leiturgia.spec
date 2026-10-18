@@ -17,6 +17,7 @@ _dynamic = (
     + collect_submodules("dns")
     + collect_submodules("engineio")  # async_drivers.eventlet is chosen by name
     + collect_submodules("socketio")
+    + collect_submodules("webview")  # platform backend (qt/winforms) chosen at runtime
 )
 
 a = Analysis(
@@ -42,6 +43,7 @@ a = Analysis(
         "requests",
         "screeninfo",
         "webview",
+        "qtpy",
     ],
     hookspath=[],
     hooksconfig={},

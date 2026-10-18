@@ -7,3 +7,4 @@ dist/
 server_src/
 smoke/
 .venv/
+.venv*/
