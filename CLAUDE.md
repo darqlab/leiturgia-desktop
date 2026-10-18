@@ -5,9 +5,10 @@ git). Planning/process docs live in `~/devops/projects/leiturgia-desktop/CLAUDE.
 
 ## What this is
 
-A portable Windows desktop build of the Leiturgia church service projection app.
-The frozen exe launches the existing Flask/SocketIO server and opens a native
-projection window on the chosen monitor.
+A portable desktop build of the Leiturgia church service projection app: a Windows
+exe, a Linux x86_64 binary, and a Raspberry Pi (arm64) path run from source. It
+launches the existing Flask/SocketIO server and opens a native projection window on
+the chosen monitor.
 
 ## Build / run
 
@@ -22,7 +23,8 @@ bash scripts/build.sh /path/to/Leiturgia
 pyinstaller leiturgia.spec --noconfirm
 ```
 
-Output: `dist/leiturgia-desktop.exe`.
+Output: `dist/leiturgia-desktop.exe` (Windows) or `dist/leiturgia-desktop` (Linux x86_64).
+There is no frozen arm64 build; the Pi runs `bash scripts/run-pi.sh /path/to/Leiturgia`.
 
 Run from source:
 
@@ -30,15 +32,21 @@ Run from source:
 LEITURGIA_SERVER_DIR=/path/to/Leiturgia python desktop_entry.py
 ```
 
-`LEITURGIA_HEADLESS=1` runs the server without a projection window (CI).
+`LEITURGIA_HEADLESS=1` runs the server in-process without a projection window (CI).
+`LEITURGIA_SELFTEST=1` opens the window, prints `NATIVE_WINDOW_OK` once `/ch1` loads, and
+exits non-zero on a browser fallback (CI, under xvfb).
 
 ## Architecture constants
 
 - **Server:** the parent `darqlab/leiturgia` Flask/SocketIO app, bundled as data
   under `_MEIPASS/leiturgia_server` and extracted into the app dir at runtime.
-- **Shell:** `desktop_entry.py` — app-dir resolution, first-run config seed, server
-  worker thread, monitor selection, native window, browser fallback.
-- **Native window:** pywebview (WebView2 on Windows). Browser fallback: `webbrowser`.
+- **Shell:** `desktop_entry.py` — app-dir resolution, first-run config seed, monitor
+  selection, native window, browser fallback. The GUI process **re-executes itself as
+  the server child** (`LEITURGIA_ROLE=server`) and never imports `app`: the server's
+  `eventlet.monkey_patch()` would starve Qt/pywebview threads.
+- **Native window:** pywebview — WebView2 (Windows), bundled Qt WebEngine when frozen
+  on Linux (`gui="qt"`, PyQt6 pinned 6.7.x, x86_64 only), system GTK/WebKit from
+  source on the Pi. Browser fallback: `webbrowser`.
 - **Config:** `config.json` in the app dir; desktop keys `desktop_mode`, `bind_lan`,
   `monitor`. `enable_self_update` is `false`.
 - **Downloader:** `downloader/` — separate yt-dlp wrapper; writes into
@@ -56,6 +64,9 @@ LEITURGIA_SERVER_DIR=/path/to/Leiturgia python desktop_entry.py
 
 ## Tests
 
-No automated test suite yet. CI smoke-tests the built exe (headless health check).
+No automated test suite yet. CI (`build-desktop.yml`) builds Windows + Linux x86_64,
+smoke-tests them headless (`/api/health`, `/login`), runs the native-window self-test
+under xvfb on Linux x86_64 (Qt) and arm64 from source (GTK), and on `v*` tags publishes
+the assets with `checksums.txt`.
 Manual verification: two-monitor projection, browser fallback, LAN remote, media
 import, downloader.
