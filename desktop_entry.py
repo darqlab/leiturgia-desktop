@@ -229,7 +229,8 @@ def _run_server(server, host: str, port: int) -> None:
         logger.exception("server thread failed")
 
 
-def _open_projection(port: int, monitor) -> None:
+def _open_projection(port: int, monitor) -> bool:
+    """Open the native projection window. Returns False if it fell back to the browser."""
     url = f"http://127.0.0.1:{port}/ch1"
     try:
         import webview
@@ -242,8 +243,16 @@ def _open_projection(port: int, monitor) -> None:
                 width=monitor.width,
                 height=monitor.height,
             )
-        webview.create_window(**kwargs)
-        webview.start()
+        window = webview.create_window(**kwargs)
+        start_kwargs = {}
+        if sys.platform.startswith("linux"):
+            # The frozen binary bundles Qt WebEngine; system GTK is not reachable from it.
+            start_kwargs["gui"] = "qt"
+        if os.environ.get("LEITURGIA_SELFTEST"):
+            start_kwargs["func"] = _selftest_close
+            start_kwargs["args"] = (window,)
+        webview.start(**start_kwargs)
+        return True
     except Exception:
         logger.exception("native window failed; falling back to the browser")
         try:
@@ -252,6 +261,14 @@ def _open_projection(port: int, monitor) -> None:
             webbrowser.open(url)
         except Exception:
             logger.exception("browser fallback failed")
+        return False
+
+
+def _selftest_close(window) -> None:
+    """CI self-test: wait for the page to load in the native window, report, close."""
+    loaded = window.events.loaded.wait(60)
+    print("NATIVE_WINDOW_OK" if loaded else "NATIVE_WINDOW_TIMEOUT", flush=True)
+    window.destroy()
 
 
 def main() -> int:
@@ -277,7 +294,9 @@ def main() -> int:
             pass
         return 0
     monitor = _choose_monitor(_load_config().get("monitor", "auto"))
-    _open_projection(port, monitor)
+    native = _open_projection(port, monitor)
+    if os.environ.get("LEITURGIA_SELFTEST") and not native:
+        return 1
     return 0
 
 
