@@ -6,14 +6,20 @@ first (see ``scripts/build.sh``). The staged tree is bundled as data and
 extracted into the app directory at runtime by ``desktop_entry.py``.
 """
 
+from PyInstaller.utils.hooks import collect_submodules
+
 block_cipher = None
+
+# eventlet picks its hub (epolls/kqueue/selects) and dnspython pieces via
+# importlib at runtime, which PyInstaller's static analysis cannot see.
+_dynamic = collect_submodules("eventlet") + collect_submodules("dns")
 
 a = Analysis(
     ["desktop_entry.py"],
     pathex=[],
     binaries=[],
     datas=[("build/leiturgia_server", "leiturgia_server")],
-    hiddenimports=[
+    hiddenimports=_dynamic + [
         "eventlet",
         "eventlet.hubs",
         "greenlet",
