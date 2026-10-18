@@ -53,7 +53,7 @@ jobs:
       - name: Package portable zip
         shell: pwsh
         run: |
-          $ver = "${{ github.ref_name }}".TrimStart('v')
+          if ("${{ github.ref }}" -like "refs/tags/*") { $ver = "${{ github.ref_name }}".TrimStart('v') } else { $ver = "dev" }
           Compress-Archive -Path .\dist\leiturgia-desktop.exe -DestinationPath "dist\leiturgia-desktop-$ver.zip"
           Get-ChildItem dist\*.zip
 
@@ -111,7 +111,7 @@ jobs:
 
       - name: Package tarball
         run: |
-          ver="${GITHUB_REF_NAME#v}"
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then ver="${GITHUB_REF_NAME#v}"; else ver=dev; fi
           tar -C dist -czf "dist/leiturgia-desktop-${ver}-linux-${{ matrix.arch }}.tar.gz" leiturgia-desktop
           ls -l dist/*.tar.gz
 
