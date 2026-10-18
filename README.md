@@ -15,13 +15,15 @@ or ffmpeg.
 ## Architecture
 
 ```
-leiturgia-desktop.exe  (PyInstaller onefile)
+leiturgia-desktop[.exe]  (PyInstaller onefile; Pi: run from source)
   desktop_entry.py
-    - resolves the app dir (exe dir, else %LOCALAPPDATA%\Leiturgia)
+    - resolves the app dir (exe dir, else %LOCALAPPDATA%\Leiturgia or ~/Leiturgia)
     - extracts the bundled server tree into the app dir on first run
     - seeds config.json (random session_secret, default PIN 1234)
-    - starts the Flask/SocketIO server in a worker thread
-    - opens a native projection window (WebView2) on the chosen monitor
+    - re-executes itself as the server child process (LEITURGIA_ROLE=server);
+      the GUI process never imports the eventlet-patched server
+    - opens a native projection window on the chosen monitor
+      (WebView2 / bundled Qt WebEngine / system GTK on the Pi)
     - falls back to the default browser
 
 server tree (bundled as data, extracted at runtime)
