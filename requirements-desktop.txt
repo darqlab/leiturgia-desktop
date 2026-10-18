@@ -8,10 +8,11 @@ websockets>=12.0
 requests>=2.31.0
 pywebview>=5.0
 screeninfo>=0.8.1
-# Linux: native window via Qt WebEngine (bundles into the frozen binary; system GTK cannot be)
-qtpy>=2.4; sys_platform == "linux"
-# Pinned: newer PyQt6 ships no manylinux_2_28 aarch64 wheel (pip would build from source on Pi)
-PyQt6==6.7.1; sys_platform == "linux"
-PyQt6-Qt6==6.7.3; sys_platform == "linux"
-PyQt6-WebEngine==6.7.0; sys_platform == "linux"
-PyQt6-WebEngine-Qt6==6.7.3; sys_platform == "linux"
+# Linux x86_64 frozen binary: native window via bundled Qt WebEngine.
+# Not on arm64/Raspberry Pi: no usable PyQt6 WebEngine wheels for Bookworm (glibc 2.36);
+# the Pi runs from source on the OS's GTK/WebKit instead (scripts/run-pi.sh).
+qtpy>=2.4; sys_platform == "linux" and platform_machine == "x86_64"
+PyQt6==6.7.1; sys_platform == "linux" and platform_machine == "x86_64"
+PyQt6-Qt6==6.7.3; sys_platform == "linux" and platform_machine == "x86_64"
+PyQt6-WebEngine==6.7.0; sys_platform == "linux" and platform_machine == "x86_64"
+PyQt6-WebEngine-Qt6==6.7.3; sys_platform == "linux" and platform_machine == "x86_64"

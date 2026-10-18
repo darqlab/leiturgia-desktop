@@ -271,8 +271,9 @@ def _open_projection(port: int, monitor) -> bool:
             )
         window = webview.create_window(**kwargs)
         start_kwargs = {}
-        if sys.platform.startswith("linux"):
+        if _is_frozen() and sys.platform.startswith("linux"):
             # The frozen binary bundles Qt WebEngine; system GTK is not reachable from it.
+            # From source (e.g. Raspberry Pi) pywebview picks the system GTK/WebKit itself.
             start_kwargs["gui"] = "qt"
         if os.environ.get("LEITURGIA_SELFTEST"):
             start_kwargs["func"] = _selftest_close

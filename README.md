@@ -34,20 +34,17 @@ leiturgia-downloader  (separate wrapper, downloader/)
 ## Requirements
 
 - **Windows 10/11** with the **WebView2 runtime** (preinstalled on most systems).
-- **Linux x86_64** and **Linux arm64** (Raspberry Pi 4/5 on 64-bit Raspberry Pi OS; 32-bit
-  armv7 is not built). Built on Ubuntu 22.04 for an older glibc baseline.
-- No Python needed on the target.
+- **Linux x86_64**: frozen binary, native window via bundled Qt WebEngine. Needs the usual
+  Qt/X11 libraries (`libxcb-cursor0`, `libnss3`, `libxkbcommon-x11-0`, …; see the CI job).
+- **Raspberry Pi (arm64, 64-bit Raspberry Pi OS Bookworm)**: **run from source** on the OS's
+  GTK/WebKit; there is no frozen arm64 build (PyQt6 WebEngine has no usable aarch64 wheel for
+  glibc 2.36). One-time: `sudo apt install python3-venv python3-gi gir1.2-gtk-3.0 gir1.2-webkit2-4.1`,
+  then `bash scripts/run-pi.sh /path/to/Leiturgia`. 32-bit armv7 is not supported.
+- No Python needed on the target for the Windows and Linux x86_64 binaries.
 
-### Linux / Raspberry Pi notes
-
-- The frozen Linux binary cannot use the system GTK/WebKit libraries, so it opens the
-  projection (`/ch1`) in the **default browser** instead of a native window. Use a
-  fullscreen/kiosk browser on the projector output.
-- For the native window, run from source with the system bindings:
-  `sudo apt install python3-gi gir1.2-webkit2-4.1`, then use a venv created with
-  `--system-site-packages`.
-- CI (`build-desktop.yml`) smoke-tests all three targets headless (health + login).
-  Not yet verified on a real Pi or with a display.
+CI (`build-desktop.yml`) builds and smoke-tests Windows and Linux x86_64, opens the native
+window under xvfb on Linux x86_64 (Qt) and on arm64 from source (GTK), and checks `/ch1` loads.
+Not yet verified on a real Pi or a physical projector.
 
 ## Build (development)
 
