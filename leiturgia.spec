@@ -12,7 +12,12 @@ block_cipher = None
 
 # eventlet picks its hub (epolls/kqueue/selects) and dnspython pieces via
 # importlib at runtime, which PyInstaller's static analysis cannot see.
-_dynamic = collect_submodules("eventlet") + collect_submodules("dns")
+_dynamic = (
+    collect_submodules("eventlet")
+    + collect_submodules("dns")
+    + collect_submodules("engineio")  # async_drivers.eventlet is chosen by name
+    + collect_submodules("socketio")
+)
 
 a = Analysis(
     ["desktop_entry.py"],
