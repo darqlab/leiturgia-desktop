@@ -1,0 +1,19 @@
+{
+  "pin": "1234",
+  "session_secret": "",
+  "session_timeout_hours": 8,
+  "max_login_attempts": 5,
+  "cloud_enabled": false,
+  "cloud_url": "",
+  "cloud_token": "",
+  "enable_self_update": false,
+  "log_level": "INFO",
+  "desktop_mode": true,
+  "bind_lan": false,
+  "monitor": "auto",
+  "media_video_budget_gb": 2,
+  "media_image_budget_gb": 1,
+  "media_disk_reserve_gb": 1,
+  "media_warn_percent": 80,
+  "media_video_dir": ""
+}

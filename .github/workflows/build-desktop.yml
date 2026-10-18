@@ -1,0 +1,64 @@
+name: Build Desktop (Windows)
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Clone parent server
+        shell: bash
+        run: |
+          git clone --depth 1 https://github.com/darqlab/leiturgia.git build/leiturgia_server
+          git -C build/leiturgia_server describe --tags --always --dirty > build/leiturgia_server/_server_version.txt
+
+      - name: Install build dependencies
+        run: pip install -r requirements-desktop.txt pyinstaller
+
+      - name: Build onefile exe
+        run: pyinstaller leiturgia.spec --noconfirm
+
+      - name: Smoke test (headless)
+        shell: pwsh
+        env:
+          LEITURGIA_HEADLESS: "1"
+        run: |
+          $exe = "$PWD\dist\leiturgia-desktop.exe"
+          $proc = Start-Process -FilePath $exe -PassThru
+          try {
+            $ok = $false
+            for ($i = 0; $i -lt 60; $i++) {
+              try {
+                $r = Invoke-WebRequest -Uri "http://127.0.0.1:5000/api/health" -UseBasicParsing -TimeoutSec 2
+                if ($r.StatusCode -eq 200) { $ok = $true; break }
+              } catch { Start-Sleep -Milliseconds 500 }
+            }
+            if (-not $ok) { throw "health check never returned 200" }
+            $login = Invoke-WebRequest -Uri "http://127.0.0.1:5000/login" -UseBasicParsing -TimeoutSec 5
+            if ($login.StatusCode -ne 200) { throw "login page returned $($login.StatusCode)" }
+            Write-Host "smoke test passed"
+          } finally {
+            if (-not $proc.HasExited) { Stop-Process -Id $proc.Id -Force }
+          }
+
+      - name: Package portable zip
+        shell: pwsh
+        run: |
+          $ver = "${{ github.ref_name }}".TrimStart('v')
+          Compress-Archive -Path .\dist\leiturgia-desktop.exe -DestinationPath "dist\leiturgia-desktop-$ver.zip"
+          Get-ChildItem dist\*.zip
+
+      - name: Attach to release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/leiturgia-desktop-*.zip
