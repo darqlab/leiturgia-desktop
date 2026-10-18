@@ -20,6 +20,9 @@ a = Analysis(
     binaries=[],
     datas=[("build/leiturgia_server", "leiturgia_server")],
     hiddenimports=_dynamic + [
+        # stdlib modules imported only by the bundled server tree (data, not analysed)
+        "asyncio", "sqlite3", "glob", "hashlib", "unicodedata", "subprocess",
+        "tempfile", "shutil", "datetime", "functools", "socket", "werkzeug",
         "eventlet",
         "eventlet.hubs",
         "greenlet",
