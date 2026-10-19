@@ -279,6 +279,10 @@ def q2():
             if wv:
                 rec["verdict_vs_webview_screen"] = verdict(screen_dict(wv[idx]), rec)
             RESULT["windows"][name] = rec
+        if ARGS.hold:
+            dump()
+            print("HOLDING: windows stay open until this process is killed", flush=True)
+            threading.Event().wait()
         for _, w, _ in wins:
             w.destroy()
     webview.start(func, gui=ARGS.gui)
@@ -537,12 +541,14 @@ if __name__ == "__main__":
     ap.add_argument("--method", default="xy", choices=["xy", "screen", "late"])
     ap.add_argument("--variant", default="")
     ap.add_argument("--server", default="http://127.0.0.1:5077")
+    ap.add_argument("--hold", action="store_true")
     ap.add_argument("--server-pid")
     ap.add_argument("--restart-cmd")
     ARGS = ap.parse_args()
     if ARGS.variant == "flag":
         os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = "--autoplay-policy=no-user-gesture-required"
-    watchdog(150)
+    if not ARGS.hold:
+        watchdog(150)
     serve(PAGES_PORT)
     serve(FOREIGN_PORT)
     RESULT["env"] = {"gui": ARGS.gui, "test": ARGS.test, "python": sys.version.split()[0]}
