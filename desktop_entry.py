@@ -230,9 +230,6 @@ def _run_server(host: str, port: int) -> None:
         starter = getattr(server, "start_background_services", None)
         if callable(starter):
             starter()
-        else:
-            server.socketio.start_background_task(server._timer_tick_loop)
-            server.socketio.start_background_task(server._cloud_update_pump)
         server.socketio.run(server.app, host=host, port=port, debug=False)
     except Exception:
         logger.exception("server failed")
