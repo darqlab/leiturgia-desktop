@@ -266,6 +266,15 @@ def q2():
     wins = [(name, open_window(webview, name, base + path, idx, si, wv, ARGS.method, fs), idx)
             for name, path, idx, fs in plan]
 
+    def close_all():
+        for _, w, _ in wins[1:]:
+            try:
+                w.destroy()
+            except Exception:
+                pass
+    if ARGS.hold:
+        wins[0][1].events.closed += close_all  # closing the console closes the projection windows
+
     def func():
         RESULT["windows"] = {}
         for name, w, idx in wins:
@@ -282,7 +291,9 @@ def q2():
         if ARGS.hold:
             dump()
             print("HOLDING: windows stay open until this process is killed", flush=True)
-            threading.Event().wait()
+            while webview.windows:
+                time.sleep(0.5)
+            return
         for _, w, _ in wins:
             w.destroy()
     webview.start(func, gui=ARGS.gui)
