@@ -1,0 +1,30 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>media-test</title>
+<body><video id="v" muted playsinline width="320"></video>
+<script>
+const q = new URLSearchParams(location.search);
+const v = document.getElementById('v');
+const probe = ['video/mp4; codecs="avc1.42E01E, mp4a.40.2"', 'video/mp4', 'video/webm; codecs="vp9, opus"',
+               'video/webm', 'audio/mpeg', 'audio/mp4; codecs="mp4a.40.2"'];
+const r = {canPlayType: {}, playingFired: false, playErr: null, events: []};
+for (const t of probe) r.canPlayType[t] = v.canPlayType(t);
+window.__result = null;
+['loadedmetadata', 'canplay', 'playing', 'pause', 'error', 'stalled'].forEach(n =>
+  v.addEventListener(n, () => { r.events.push(n); if (n === 'playing') r.playingFired = true; }));
+v.src = q.get('src');
+// Q6 sequence: muted play() with no click, then unmute with no click.
+const p = v.play();
+if (p) p.catch(e => { r.playErr = e.name; });
+v.muted = (q.get('unmute') !== '1');
+const t0 = performance.now();
+let first = null;
+setTimeout(() => { first = v.currentTime; }, 1000);
+setTimeout(() => {
+  r.paused = v.paused; r.muted = v.muted; r.currentTime = v.currentTime;
+  r.advancing = first !== null && v.currentTime > first;
+  r.readyState = v.readyState; r.errorCode = v.error ? v.error.code : null;
+  r.errorMessage = v.error ? v.error.message : null;
+  window.__result = r;
+}, 3000);
+</script>

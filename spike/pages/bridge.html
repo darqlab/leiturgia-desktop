@@ -1,0 +1,21 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>bridge-test</title>
+<body><pre id="out">waiting</pre>
+<script>
+const tag = new URLSearchParams(location.search).get('tag') || 'page';
+async function run() {
+  const info = {tag, origin: location.origin, hasPywebview: typeof window.pywebview,
+                hasApi: !!(window.pywebview && window.pywebview.api)};
+  try {
+    info.result = await window.pywebview.api.ping(tag);
+  } catch (e) {
+    info.error = String(e);
+  }
+  window.__result = info;
+  document.getElementById('out').textContent = JSON.stringify(info);
+  if (window.parent !== window) window.parent.postMessage(info, '*');
+}
+window.addEventListener('pywebviewready', run);
+setTimeout(() => { if (!window.__result) run(); }, 3000);
+</script>

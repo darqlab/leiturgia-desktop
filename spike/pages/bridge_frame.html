@@ -1,0 +1,10 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>bridge-frame-host</title>
+<body><iframe id="f" width="400" height="200"></iframe>
+<script>
+window.__frame = null;
+window.addEventListener('message', e => { window.__frame = e.data; });
+const u = new URLSearchParams(location.search).get('foreign');
+document.getElementById('f').src = u + '/bridge.html?tag=iframe';
+</script>
