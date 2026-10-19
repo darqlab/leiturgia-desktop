@@ -1,0 +1,45 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Leiturgia setup</title>
+<style>
+  body { font: 16px system-ui, sans-serif; max-width: 640px; margin: 2rem auto; padding: 0 1rem; color: #1b1b1b; }
+  h1 { font-size: 1.4rem; } label { display: block; margin-top: 1.2rem; font-weight: 600; }
+  input[type=text], select { font: inherit; padding: .45rem .6rem; width: 100%; box-sizing: border-box; }
+  table { width: 100%; border-collapse: collapse; margin-top: .5rem; } td { padding: .35rem .4rem .35rem 0; }
+  td:first-child { width: 55%; } .hint { color: #666; font-size: .9rem; font-weight: 400; }
+  button { font: inherit; margin-top: 1.5rem; padding: .6rem 1.2rem; } #err { color: #b00020; margin-top: 1rem; min-height: 1.2em; }
+</style>
+<h1>Leiturgia setup</h1>
+<p class="hint">Shown because no server address is saved yet. Changing it later: start with a different <code>--config</code> file.</p>
+<label>Server address <span class="hint">e.g. http://10.224.61.56:5000</span>
+  <input type="text" id="addr" placeholder="http://host:port" autofocus></label>
+<label>Screens <span class="hint">what each monitor shows</span></label>
+<table id="screens"></table>
+<button id="go">Save and open</button>
+<div id="err"></div>
+<script>
+async function init() {
+  const st = await pywebview.api.get_state();
+  if (st.error) { document.getElementById('err').textContent = st.error; return; }
+  document.getElementById('addr').value = st.address || '';
+  const t = document.getElementById('screens');
+  st.screens.forEach((s, i) => {
+    const tr = document.createElement('tr');
+    const label = `Screen ${i + 1} (${s.w}×${s.h})`;
+    if (i === 0) { tr.innerHTML = `<td>${label}</td><td>Console (this window)</td>`; t.appendChild(tr); return; }
+    const want = (st.mapping && st.mapping[i] !== undefined) ? st.mapping[i] : i;
+    let opts = `<option value="0"${want == 0 ? ' selected' : ''}>Off</option>`;
+    for (let c = 1; c <= 5; c++) opts += `<option value="${c}"${want == c ? ' selected' : ''}>Projection ch${c}</option>`;
+    tr.innerHTML = `<td>${label}</td><td><select data-i="${i}">${opts}</select></td>`;
+    t.appendChild(tr);
+  });
+}
+document.getElementById('go').onclick = async () => {
+  const mapping = {};
+  document.querySelectorAll('select[data-i]').forEach(s => { mapping[s.dataset.i] = parseInt(s.value, 10); });
+  const err = document.getElementById('err'); err.textContent = 'Checking server…';
+  const r = await pywebview.api.save_and_apply(document.getElementById('addr').value, mapping);
+  err.textContent = r.ok ? 'Opening…' : r.error;
+};
+window.addEventListener('pywebviewready', init);
+</script>

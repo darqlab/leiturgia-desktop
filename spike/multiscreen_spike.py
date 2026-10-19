@@ -545,6 +545,87 @@ def q7():
     dump()
 
 
+# ---------------------------------------------------------------- console (manual test: setup page + mapping)
+def console():
+    """Console window; if no server address is saved it shows spike/pages/settings.html first."""
+    import webview
+    cfgp = ARGS.config or os.path.join(RUN, "desktop.json")
+    try:
+        with open(cfgp) as f:
+            cfg = json.load(f)
+    except Exception:
+        cfg = {}
+    pages = f"http://127.0.0.1:{PAGES_PORT}"
+    wv = list(webview.screens)
+    projections = []
+
+    class Settings:
+        def __init__(self):
+            self._window = None
+
+        def _trusted(self):
+            u = urlparse(self._window.get_current_url() or "")
+            return f"{u.scheme}://{u.netloc}" == pages
+
+        def get_state(self):
+            if not self._trusted():
+                return {"error": "origin rejected"}
+            return {"address": cfg.get("server", ""), "mapping": cfg.get("mapping", {}),
+                    "screens": [{"w": s.width, "h": s.height} for s in wv]}
+
+        def save_and_apply(self, address, mapping):
+            if not self._trusted():
+                return {"ok": False, "error": "origin rejected"}
+            address = (address or "").strip().rstrip("/")
+            u = urlparse(address)
+            if u.scheme not in ("http", "https") or not u.netloc:
+                return {"ok": False, "error": "Enter a full address, e.g. http://10.224.61.56:5000"}
+            st = health(address)
+            if st != 200:
+                return {"ok": False, "error": f"Server did not answer /api/health ({st})"}
+            mapping = {int(k): int(v) for k, v in mapping.items() if 0 < int(k) < len(wv) and 0 <= int(v) <= 5}
+            cfg.update(server=address, mapping={str(k): v for k, v in mapping.items()})
+            with open(cfgp, "w") as f:
+                json.dump(cfg, f, indent=2)
+            threading.Thread(target=apply, args=(address, mapping, True), daemon=True).start()
+            return {"ok": True}
+
+    api = Settings()
+    configured = bool(cfg.get("server"))
+    url = cfg["server"] + "/" if configured else f"{pages}/settings.html"
+    m0 = wv[0]
+    win = webview.create_window("Leiturgia console", url, js_api=api, screen=m0, width=900, height=700, maximized=True)
+    api._window = win
+
+    def close_all():
+        for w in projections:
+            try:
+                w.destroy()
+            except Exception:
+                pass
+    win.events.closed += close_all
+
+    def apply(address, mapping, load_console):
+        if load_console:
+            win.load_url(address + "/")
+        for idx in sorted(mapping):
+            ch = mapping[idx]
+            if not ch:
+                continue
+            w = webview.create_window(f"Screen {idx + 1} - ch{ch}", f"{address}/ch{ch}", screen=wv[idx],
+                                      width=wv[idx].width, height=wv[idx].height)
+            projections.append(w)
+            w.events.loaded.wait(30)
+            time.sleep(1)
+            w.toggle_fullscreen()
+
+    def func():
+        if configured:
+            apply(cfg["server"], {int(k): v for k, v in cfg.get("mapping", {}).items()}, False)
+    print(f"config file: {cfgp} ({'found' if configured else 'no server saved -> setup page'})", flush=True)
+    webview.start(func, gui=ARGS.gui)
+
+
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--gui", required=True, choices=["qt", "gtk"])
@@ -552,13 +633,14 @@ if __name__ == "__main__":
     ap.add_argument("--method", default="xy", choices=["xy", "screen", "late"])
     ap.add_argument("--variant", default="")
     ap.add_argument("--server", default="http://127.0.0.1:5077")
+    ap.add_argument("--config")
     ap.add_argument("--hold", action="store_true")
     ap.add_argument("--server-pid")
     ap.add_argument("--restart-cmd")
     ARGS = ap.parse_args()
     if ARGS.variant == "flag":
         os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = "--autoplay-policy=no-user-gesture-required"
-    if not ARGS.hold:
+    if not ARGS.hold and ARGS.test != "console":
         watchdog(150)
     serve(PAGES_PORT)
     serve(FOREIGN_PORT)
